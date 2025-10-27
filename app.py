@@ -63,18 +63,21 @@ def get_config(section, key, default=None):
     return config.get(section, key, fallback=default)
 
 # --- Global Configuration ---
-# --- Global Configuration ---
-# --- RENDER FIX: Use Persistent Disk for data ---
-# This is the mount path you will set up in the Render dashboard.
-RENDER_DISK_MOUNT_PATH = '/var/render/data' 
+# --- RENDER FIX (COMMENTED OUT): We are NOT using a persistent disk ---
+# This is the mount path you would set up in the Render dashboard.
+# RENDER_DISK_MOUNT_PATH = '/var/render/data' 
 # --- END RENDER FIX ---
 
 LOCAL_DATA_FOLDER = get_config('FILES', 'local_data_folder', default='local_data_storage')
-# --- RENDER FIX: Prepend the disk path if it's the default folder ---
-if LOCAL_DATA_FOLDER == 'local_data_storage':
-    LOCAL_DATA_FOLDER = os.path.join(RENDER_DISK_MOUNT_PATH, 'local_data_storage')
+# --- RENDER FIX (COMMENTED OUT): We are NOT using a persistent disk ---
+# if LOCAL_DATA_FOLDER == 'local_data_storage':
+#     LOCAL_DATA_FOLDER = os.path.join(RENDER_DISK_MOUNT_PATH, 'local_data_storage')
 # --- END RENDER FIX ---
 
+MODEL_VERSIONS_FILE = config.get('FILES', 'model_versions_file')
+# The app will now create 'local_data_storage' in its own directory
+SHIELDING_SESSIONS_LOG_FILE = os.path.join(LOCAL_DATA_FOLDER, 'shielding_cart_sessions.csv')
+MASTER_INVENTORY_FILE = os.path.join(LOCAL_DATA_FOLDER, 'master_inventory.csv')
 MODEL_VERSIONS_FILE = config.get('FILES', 'model_versions_file')
 SHIELDING_SESSIONS_LOG_FILE = os.path.join(LOCAL_DATA_FOLDER, 'shielding_cart_sessions.csv')
 MASTER_INVENTORY_FILE = os.path.join(LOCAL_DATA_FOLDER, 'master_inventory.csv')

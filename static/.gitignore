@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+.env
+local_data_storage/
+*.csv
+model_versions.json
+config.ini

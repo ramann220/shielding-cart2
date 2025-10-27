@@ -1,0 +1,11 @@
+flask
+flask-cors
+waitress
+requests
+configparser
+pandas
+numpy
+joblib
+prophet
+opencv-python-headless
+urllib3

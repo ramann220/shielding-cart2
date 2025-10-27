@@ -1,0 +1,1179 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8" />
+    <title>AI RFID Shielding Cart</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Roboto+Mono:wght@400&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+    <style>
+        :root {
+            --bg-color: #111111;
+            --panel-color: rgba(28, 28, 28, 0.75);
+            --border-color: rgba(255, 77, 0, 0.2);
+            --accent-color: #FF4D00;
+            --accent-hover: #FF6A29;
+            --text-primary: #F5F5F5;
+            --text-secondary: #A0A0A0;
+            --green-color: #22c55e;
+            --yellow-color: #f59e0b;
+            --red-color: #ef4444;
+            --blue-color: #3b82f6;
+        }
+        body { font-family: 'Inter', sans-serif; background-color: var(--bg-color); color: var(--text-primary); }
+        .font-mono { font-family: 'Roboto Mono', monospace; }
+        .sidebar-link { display: flex; align-items: center; padding: 0.75rem 1rem; border-radius: 0.75rem; font-weight: 500; color: var(--text-secondary); transition: all 0.2s; }
+        .sidebar-link:hover, .sidebar-link.active { background-color: rgba(255, 77, 0, 0.1); color: var(--text-primary); }
+        #plexus-canvas { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 0; }
+        .page-container { position: relative; z-index: 10; transition: opacity 0.7s ease-in-out, transform 0.7s ease-in-out; }
+        .page-container.hidden { opacity: 0; pointer-events: none; position: absolute; top: 0; left: 0; width: 100%; transform: scale(0.98); }
+        #welcome-page { display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+        .welcome-title { font-size: clamp(2.5rem, 6vw, 5rem); font-weight: 700; letter-spacing: -0.02em; color: var(--text-primary); }
+        .launch-card { background-color: var(--panel-color); border: 1px solid var(--border-color); backdrop-filter: blur(12px); border-radius: 0.75rem; padding: 2rem; text-align: center; cursor: pointer; transition: all 0.3s ease; }
+        .launch-card:hover { transform: translateY(-5px); border-color: var(--accent-color); box-shadow: 0 0 20px rgba(255, 77, 0, 0.3); }
+        .launch-card h2 { color: var(--text-primary); font-size: 1.25rem; font-weight: 600; }
+        .launch-card p { color: var(--text-secondary); font-size: 0.875rem; margin-top: 0.5rem; }
+        .panel { background-color: var(--panel-color); backdrop-filter: blur(12px); border-radius: 0.75rem; border: 1px solid var(--border-color); }
+        .status-dot { width: 9px; height: 9px; border-radius: 50%; }
+        .status-Connected, .status-Running, .status-active_transaction, .status-scanning, .status-complete { background-color: var(--green-color); box-shadow: 0 0 6px var(--green-color); }
+        .status-Connecting, .status-Starting, .status-Idle, .status-idle, .status-running, .status-awaiting_resolution, .status-awaiting_box_scan, .status-scanning_box { background-color: var(--yellow-color); animation: pulse-status 2s infinite; }
+        .status-Error, .status-Disconnected, .status-Stopped { background-color: var(--red-color); }
+        .status-auditing { background-color: #fb923c; animation: pulse-status 2s infinite; }
+        @keyframes pulse-status { 50% { opacity: 0.6; } }
+        .btn { display: inline-flex; align-items: center; justify-content: center; padding: 0.5rem 1rem; border-radius: 0.5rem; font-weight: 500; transition: all 0.2s; border: 1px solid transparent; cursor: pointer; }
+        .btn:disabled { cursor: not-allowed; opacity: 0.5; }
+        .btn-primary { background-color: var(--accent-color); color: white; } .btn-primary:hover:not(:disabled) { background-color: var(--accent-hover); }
+        .btn-secondary { background-color: rgba(255, 255, 255, 0.05); color: var(--text-primary); border-color: rgba(255, 255, 255, 0.2); } .btn-secondary:hover:not(:disabled) { background-color: rgba(255, 255, 255, 0.1); border-color: rgba(255, 255, 255, 0.3); }
+        .btn-danger { background-color: var(--red-color); color: white; } .btn-danger:hover:not(:disabled) { background-color: #f87171; }
+        ::-webkit-scrollbar { width: 6px; } ::-webkit-scrollbar-track { background: transparent; } ::-webkit-scrollbar-thumb { background: rgba(255, 77, 0, 0.5); border-radius: 10px; } ::-webkit-scrollbar-thumb:hover { background: var(--accent-color); }
+        #toast-container { position: fixed; bottom: 1rem; right: 1rem; z-index: 1000; display: flex; flex-direction: column; gap: 0.75rem; }
+        .toast { padding: 0.75rem 1.25rem; border-radius: 0.5rem; color: white; font-weight: 500; opacity: 0; transform: translateY(100%); transition: all 0.4s ease-in-out; background-color: rgba(30, 30, 50, 0.9); border: 1px solid var(--border-color); }
+        .toast.show { opacity: 1; transform: translateY(0); }
+        .toast-info { border-left: 4px solid var(--blue-color); }
+        .toast-success { border-left: 4px solid var(--green-color); }
+        .toast-error { border-left: 4px solid var(--red-color); }
+        .toast-warning { border-left: 4px solid var(--yellow-color); }
+        details > summary { list-style: none; }
+        details > summary::-webkit-details-marker { display: none; }
+        details > summary::before { content: '▶'; margin-right: 0.5rem; font-size: 0.8em; display: inline-block; transition: transform 0.2s; }
+        details[open] > summary::before { transform: rotate(90deg); }
+    </style>
+</head>
+<body>
+    <canvas id="plexus-canvas"></canvas>
+    <div id="toast-container"></div>
+
+    <div id="welcome-page" class="page-container">
+        <div class="text-center px-4 max-w-4xl mx-auto">
+            <h1 class="welcome-title">AI Integrated RFID Platform</h1>
+            <p class="mt-4 text-xl md:text-2xl text-gray-400">Launch Shielding Cart Application</p>
+            <div id="launch-options" class="flex justify-center mt-12">
+                <div class="launch-card w-full md:w-1/3" data-target="shielding-cart-content" data-context="shielding_cart">
+                    <h2>Shielding Cart</h2>
+                    <p>Manage and monitor shielded RFID environments for testing and validation.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="shielding-cart-content" class="page-container hidden app-content flex flex-col h-screen">
+        <div class="flex flex-1 overflow-y-auto">
+            <aside class="w-64 flex-shrink-0 p-4">
+                <div class="h-full panel p-4 flex flex-col">
+                    <div class="flex items-center gap-3 mb-8 px-2">
+                        <svg class="w-8 h-8 text-accent-color" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+                        <h1 class="text-xl font-bold text-white">Shielding Cart</h1>
+                    </div>
+                    <nav class="flex flex-col gap-2 app-nav" data-app="shielding-cart">
+                        <a href="#dashboard" class="sidebar-link active" data-view="sc-dashboard"><span>Dashboard</span></a>
+                        <a href="#inventory" class="sidebar-link" data-view="sc-inventory-view"><span>Live Inventory</span></a>
+                        <a href="#ai-analysis" class="sidebar-link" data-view="sc-ai-analysis"><span>AI Analysis</span></a>
+                        <a href="#system-control" class="sidebar-link" data-view="sc-system-control"><span>System Control</span></a>
+                    </nav>
+                    <div class="mt-auto">
+                        <button class="return-home-btn btn btn-secondary w-full">Return to Hub</button>
+                    </div>
+                </div>
+            </aside>
+            <main class="flex-1 p-4 pl-0">
+                <div class="max-w-screen-2xl mx-auto min-h-full flex flex-col">
+
+                    <div class="app-view" id="view-sc-dashboard">
+                        <h1 class="text-4xl font-bold text-white mb-6">Shielding Cart Dashboard</h1>
+                        <div class="grid grid-cols-12 gap-6">
+                            <div class="col-span-12 lg:col-span-7 flex flex-col gap-6">
+                                <div id="sc-session-panel" class="panel p-6">
+                                    <div class="flex justify-between items-start">
+                                        <div>
+                                            <h2 class="text-2xl font-bold mb-2 text-white">Inventory Session</h2>
+                                            <p id="sc-status-text" class="text-gray-400 mb-6">System is idle. Start a session to begin scanning.</p>
+                                        </div>
+                                        <div class="flex items-center gap-2">
+                                            <div id="sc-status-dot" class="status-dot status-idle"></div>
+                                            <span id="sc-status-label" class="font-mono text-sm uppercase">Idle</span>
+                                        </div>
+                                    </div>
+                                    <div class="space-y-4">
+                                        <div>
+                                            <label class="block text-sm font-medium text-gray-400 mb-1">Session Purpose</label>
+                                            <div id="sc-inventory-mode-selector" class="flex gap-2 flex-wrap">
+                                                <button data-mode="scan_only" class="btn btn-primary text-sm">Scan Only</button>
+                                                <button data-mode="check_in" class="btn btn-secondary text-sm">Inbound Operation</button>
+                                                <button data-mode="check_out" class="btn btn-secondary text-sm">Outbound Operation</button>
+                                                <button data-mode="inventory_audit" class="btn btn-secondary text-sm">Inventory Audit</button>
+                                                <button data-mode="asn_check_in" class="btn btn-secondary text-sm">ASN Inbound</button>
+                                                <button data-mode="asn_check_out" class="btn btn-secondary text-sm">ASN Outbound</button>
+                                            </div>
+                                            <div id="sc-audit-sku-input-container" class="hidden mt-2">
+                                                <label class="block text-sm font-medium text-gray-400 mb-1">SKU to Audit</label>
+                                                <div class="flex gap-2">
+                                                    <input type="text" id="sc-audit-sku-input" placeholder="Enter SKU..." class="flex-1 text-sm bg-white/5 border-white/10 text-white rounded-md px-4 py-2 focus:outline-none focus:ring-2 focus:ring-accent-color">
+                                                    <button id="sc-set-audit-sku-btn" class="btn btn-secondary">Set SKU</button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="flex gap-4">
+                                            <button id="sc-start-btn" class="btn btn-primary">Start New Session</button>
+                                            <button id="sc-cancel-audit-btn" class="btn btn-secondary hidden">Cancel Audit</button>
+                                            <button id="sc-stop-btn" class="btn btn-danger hidden">Stop & Finalize Stock</button>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div id="sc-ai-feedback-panel" class="panel p-4 border-l-4 border-blue-500">
+                                    <div class="flex items-center">
+                                        <div id="sc-ai-feedback-icon" class="text-2xl mr-3">💡</div>
+                                        <div>
+                                            <p id="sc-ai-feedback-title" class="font-bold text-blue-300">AI Guidance</p>
+                                            <p id="sc-ai-feedback-message" class="text-sm text-gray-300">System ready. Start a session to begin scanning.</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div id="sc-asn-panel" class="panel p-6 hidden">
+                                    <h2 class="text-2xl font-bold mb-4 text-white">Advanced Shipping Notice (ASN)</h2>
+                                    <div id="sc-asn-upload-section">
+                                        <p class="text-sm text-gray-400 mb-2">Upload an ASN file (CSV/Excel) to begin inbound or outbound operation.</p>
+                                        <input type="file" id="sc-asn-file-input" accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" class="w-full text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-orange-50 file:text-orange-700 hover:file:bg-orange-100">
+                                        <button id="sc-upload-asn-btn" class="btn btn-primary w-full mt-2">Upload ASN</button>
+                                    </div>
+                                    <div id="sc-asn-active-section" class="hidden space-y-3">
+                                        <div class="flex justify-between items-center">
+                                            <h3 class="font-semibold text-gray-300">Active ASN</h3>
+                                            <button id="sc-cancel-asn-btn" class="btn btn-danger text-xs px-2 py-1">Cancel ASN</button>
+                                        </div>
+                                        <p class="text-sm">PO Number: <span id="sc-asn-po-number" class="font-mono text-orange-300"></span></p>
+                                        <p class="text-sm">Total Boxes: <span id="sc-asn-box-count" class="font-mono text-white"></span></p>
+                                        <div class="pt-2 border-t border-[var(--border-color)]">
+                                            <p class="text-sm text-gray-400">Select a box from the "Scanned Items" panel to begin scanning.</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div id="sc-session-summary-panel" class="panel p-6 hidden">
+                                    </div>
+                            </div>
+
+                            <div class="col-span-12 lg:col-span-5 panel p-6">
+                                <div class="flex justify-between items-center mb-4">
+                                    <h2 class="text-xl font-bold text-white">Scanned Items / Boxes / Audit</h2>
+                                    <span id="sc-total-items" class="font-mono text-2xl font-bold text-orange-400">0</span>
+                                </div>
+                                <div id="sc-scanned-items-list" class="overflow-y-auto h-96 pr-2 space-y-2">
+                                    <p class="text-center text-gray-500 pt-16">Waiting for scan data...</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="app-view hidden" id="view-sc-inventory-view">
+                        <h1 class="text-4xl font-bold text-white mb-6">Master Inventory Viewer</h1>
+                        <div class="panel p-6 mb-6">
+                            <div class="flex gap-4">
+                                <input type="text" id="sc-inventory-search-input" placeholder="Search EPC, SKU, Name, or Class..." class="flex-1 text-sm bg-white/5 border-white/10 text-white rounded-md px-4 py-2 focus:outline-none focus:ring-2 focus:ring-accent-color">
+                                <button id="sc-inventory-search-btn" class="btn btn-primary">Search</button>
+                            </div>
+                        </div>
+                        <div class="panel overflow-hidden">
+                            <div class="overflow-x-auto overflow-y-auto h-[70vh]">
+                                <table class="w-full text-left">
+                                    <thead class="sticky top-0 bg-[#1C1C1C]/80 backdrop-blur-sm">
+                                        <tr>
+                                            <th class="p-3 text-sm font-semibold text-gray-500 uppercase">EPC</th>
+                                            <th class="p-3 text-sm font-semibold text-gray-500 uppercase">SKU</th>
+                                            <th class="p-3 text-sm font-semibold text-gray-500 uppercase">Name</th>
+                                            <th class="p-3 text-sm font-semibold text-gray-500 uppercase">Stock</th>
+                                            <th class="p-3 text-sm font-semibold text-gray-500 uppercase">Usage/Day</th>
+                                            <th class="p-3 text-sm font-semibold text-gray-500 uppercase">Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="sc-inventory-table-body" class="divide-y divide-[var(--border-color)]">
+                                        <tr><td colspan="6" class="text-center text-gray-500 p-4">Upload Master Inventory to view stock.</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="app-view hidden" id="view-sc-ai-analysis">
+                        <h1 class="text-4xl font-bold text-white mb-6">AI Analysis</h1>
+                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            <div class="panel p-6">
+                                <h2 class="text-xl font-bold mb-4 text-white">Predictive Inventory Depletion</h2>
+                                <p class="text-gray-400 text-sm mb-4">AI forecast for all items with valid sales data. Sorted by soonest-to-deplete.</p>
+                                <div id="sc-depletion-list" class="space-y-2 overflow-y-auto max-h-96 pr-2">
+                                    <p class="text-center text-gray-500 pt-8">Loading predictions...</p>
+                                </div>
+                            </div>
+                            <div class="panel p-6">
+                                <h2 class="text-xl font-bold mb-4 text-white">Historical Performance Score</h2>
+                                <div class="h-96"><canvas id="sc-history-chart"></canvas></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="app-view hidden" id="view-sc-system-control">
+                        <h1 class="text-4xl font-bold text-white mb-6">System Control</h1>
+                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            <div class="panel p-6 space-y-4">
+                                <h3 class="text-lg font-semibold text-white">RFID Reader</h3>
+                                <div class="space-y-3" id="sc-reader-controls">
+                                    <input type="text" placeholder="IP Address" class="w-full text-sm bg-white/5 border-white/10 text-white rounded-md px-4 py-2 reader-ip">
+                                    <input type="text" placeholder="Username" class="w-full text-sm bg-white/5 border-white/10 text-white rounded-md px-4 py-2 reader-user">
+                                    <input type="password" placeholder="Password" class="w-full text-sm bg-white/5 border-white/10 text-white rounded-md px-4 py-2 reader-pass">
+                                    <button class="btn btn-primary w-full reader-connect-btn">Connect</button>
+                                    <button class="btn btn-danger w-full hidden reader-disconnect-btn">Disconnect</button>
+                                </div>
+                                <div class="pt-4 border-t border-[var(--border-color)]">
+                                    <h3 class="text-lg font-semibold text-white mb-2">Master Inventory Management</h3>
+                                    <p class="text-sm text-gray-400 mb-2">Upload or download your master inventory file (CSV/Excel).</p>
+                                    <input type="file" id="sc-inventory-file-input" accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" class="w-full text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-orange-50 file:text-orange-700 hover:file:bg-orange-100">
+                                    <div class="flex gap-2 mt-2">
+                                        <button id="sc-upload-inventory-btn" class="btn btn-secondary w-full">Upload Inventory</button>
+                                        <button id="sc-download-inventory-btn" class="btn btn-secondary w-full">Download Inventory</button>
+                                    </div>
+                                </div>
+                                <div class="pt-4 border-t border-[var(--border-color)]">
+                                    <h3 class="text-lg font-semibold text-white mb-2">Sales Data Upload</h3>
+                                    <p class="text-sm text-gray-400 mb-2">Upload a sales log to calculate average daily usage and train AI models.</p>
+                                    <input type="file" id="sc-sales-file-input" accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" class="w-full text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
+                                    <button id="sc-upload-sales-btn" class="btn btn-secondary w-full mt-2">Upload Sales Data</button>
+                                </div>
+                            </div>
+                            <div class="panel p-6 space-y-4">
+                                <h3 class="text-lg font-semibold text-white">Antenna Power & Maintenance</h3>
+                                <div id="sc-antenna-power-controls" class="space-y-4">
+                                    <p class="text-gray-500 text-sm">Antenna power controls appear here when reader is connected.</p>
+                                </div>
+                                <div class="pt-4 border-t border-[var(--border-color)]">
+                                    <h3 class="text-lg font-semibold text-white mb-2">Predictive Maintenance</h3>
+                                    <div id="sc-maintenance-status" class="p-3 rounded-lg bg-green-900/50 border-l-4 border-green-500">
+                                        <p class="font-bold text-green-300">Status: Nominal</p>
+                                        <p class="text-sm text-gray-300">Hardware is operating normally.</p>
+                                    </div>
+                                </div>
+                                <div class="pt-4 border-t border-[var(--border-color)]">
+                                     <h3 class="text-lg font-semibold text-white mb-2">Vision System (Optional)</h3>
+                                     <div class="flex items-center justify-between">
+                                          <span class="font-semibold text-white">Camera Feed</span>
+                                          <button id="sc-vision-toggle-btn-sys" class="btn btn-secondary px-3 py-1 text-sm">Start Camera</button>
+                                     </div>
+                                      <div class="bg-black rounded-lg overflow-hidden aspect-video mt-2">
+                                           <img id="sc-video-feed" src="/video_feed_sc" alt="Live video feed (App 2)"/>
+                                     </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </main>
+        </div>
+    </div>
+
+<script>
+// --- Global & Utility ---
+let appInitialized = false;
+let charts = {};
+let latestData = null; 
+let asnOpenDetails = new Set(); 
+
+const API_BASE_URL = ''; // Use a relative path
+
+function showToast(message, type = 'info', targetContainerId = 'toast-container') {
+    const container = document.getElementById(targetContainerId);
+    if (!container) return;
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
+    toast.textContent = message;
+    container.appendChild(toast);
+    setTimeout(() => toast.classList.add('show'), 10);
+    setTimeout(() => {
+        toast.classList.remove('show');
+        toast.addEventListener('transitionend', () => toast.remove());
+    }, 4000);
+}
+
+async function apiCall(endpoint, options = {}) {
+    try {
+        const response = await fetch(`${API_BASE_URL}${endpoint}`, options);
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ message: response.statusText }));
+            throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+        }
+        if (response.status === 204) return null;
+        const contentType = response.headers.get("content-type");
+        if (contentType && contentType.indexOf("text/csv") !== -1) return response.blob();
+        if (contentType && contentType.indexOf("application/json") !== -1) return response.json();
+        return response.text();
+    } catch (error) {
+        console.error(`API call to ${endpoint} failed:`, error);
+        showToast(`Error: ${error.message}`, 'error');
+        throw error;
+    }
+}
+
+// --- UI Navigation & App Launching ---
+function launchApplication(targetId) {
+    document.getElementById('welcome-page').classList.add('hidden');
+    document.getElementById(targetId).classList.remove('hidden');
+    if (!appInitialized) {
+        initializeApp();
+        appInitialized = true;
+    }
+}
+
+function showWelcomePage() {
+    document.getElementById('shielding-cart-content').classList.add('hidden');
+    document.getElementById('welcome-page').classList.remove('hidden');
+}
+
+// --- *** NEW/MODIFIED FUNCTION *** ---
+function handleAppNavigation(event) {
+    event.preventDefault();
+    const link = event.currentTarget;
+    const appContent = link.closest('.app-content');
+
+    appContent.querySelectorAll('.sidebar-link').forEach(l => l.classList.remove('active'));
+    link.classList.add('active');
+
+    const targetViewId = link.getAttribute('data-view');
+    appContent.querySelectorAll('.app-view').forEach(view => view.classList.add('hidden'));
+    const targetView = appContent.querySelector(`#view-${targetViewId}`);
+    if (targetView) targetView.classList.remove('hidden');
+
+    // --- MODIFIED SECTION ---
+    if (targetViewId === 'sc-ai-analysis') {
+        updateShieldingCartHistoryChart();
+        // --- ADDED: Fetch all predictions when tab is clicked ---
+        fetchAllDepletionPredictions(); 
+    }
+    // --- END MODIFIED SECTION ---
+    if (targetViewId === 'sc-inventory-view') updateInventoryView('sc-inventory-table-body');
+}
+// --- *** END NEW/MODIFIED FUNCTION *** ---
+
+
+// --- App Initialization & Data Polling ---
+function initializeApp() {
+    initAppCharts();
+    pollAppData();
+    const savedConfig = localStorage.getItem('readerConfigApp2');
+    if (savedConfig) {
+        try {
+            const config = JSON.parse(savedConfig);
+            document.querySelectorAll('#sc-reader-controls .reader-ip').forEach(el => el.value = config.ip || '');
+            document.querySelectorAll('#sc-reader-controls .reader-user').forEach(el => el.value = config.user || '');
+            document.querySelectorAll('#sc-reader-controls .reader-pass').forEach(el => el.value = config.pass || '');
+        } catch(e) { localStorage.removeItem('readerConfigApp2'); }
+    }
+}
+
+function pollAppData() {
+    apiCall('/api/app_data')
+    .then(data => {
+        if (data) {
+            latestData = data; 
+            updateShieldingCartUI(data);
+        }
+    }).catch(err => {
+        console.error("Shielding Cart data poll failed.", err);
+    }).finally(() => {
+        setTimeout(pollAppData, 1000); // Poll every second
+    });
+}
+
+function initAppCharts() {
+     const chartOptions = (title) => ({
+         maintainAspectRatio: false,
+         plugins: {
+             tooltip: { mode: 'index', intersect: false, backgroundColor: '#1C1C1C', titleColor: '#F5F5F5', bodyColor: '#A0A0A0' },
+             legend: { display: true, position: 'bottom', labels: { color: '#A0A0A0'} },
+             title: { display: true, text: title, color: '#F5F5F5', font: { weight: '500', size: 14 } }
+         },
+         scales: { y: { ticks: { color: '#A0A0A0' }, grid: { color: 'rgba(255, 77, 0, 0.1)' } }, x: { ticks: { color: '#A0A0A0' }, grid: { display: false } } },
+         responsive: true
+     });
+
+    charts.scHistory = new Chart(document.getElementById('sc-history-chart').getContext('2d'), {
+        type: 'line',
+        data: { labels: [], datasets: [{ label: 'Performance Score', data: [], borderColor: 'var(--accent-color)', tension: 0.4, pointRadius: 2, fill: false }] },
+        options: chartOptions('Recent Session Performance')
+    });
+}
+
+// --- UI Update Functions (Shielding Cart Specific) ---
+function updateShieldingCartUI(data) {
+    const state = data.shielding_cart;
+    const health = data.system_health;
+    const isAuditMode = state.inventory_mode === 'inventory_audit';
+    const isAsnMode = state.inventory_mode?.includes('asn');
+
+    // Toggle Panels based on Mode
+    const sessionPanel = document.getElementById('sc-session-panel');
+    const asnPanel = document.getElementById('sc-asn-panel');
+    if (sessionPanel) sessionPanel.classList.toggle('hidden', isAsnMode);
+    if (asnPanel) asnPanel.classList.toggle('hidden', !isAsnMode);
+
+    // Main Status Display
+    document.getElementById('sc-status-label').textContent = state.status.replace(/_/g, ' ');
+    document.getElementById('sc-status-dot').className = `status-dot status-${state.status}`;
+    let statusText = {
+        idle: `System is idle. Mode: ${state.inventory_mode.replace(/_/g, ' ')}. Start a session to begin.`,
+        scanning: `Scanning... Session ID: ${state.session_id}. Mode: ${state.inventory_mode.replace(/_/g, ' ')}.`,
+        auditing: `Auditing SKU: ${state.audit_target ? state.audit_target.name : 'None Set'}. Scan all items.`,
+        awaiting_resolution: `Audit paused. Review discrepancies and choose action.`,
+        complete: "Session complete. View summary or start new session."
+    }[state.status] || "Unknown state";
+
+    // ASN Specific Status
+    if (isAsnMode) {
+        statusText = {
+            idle: `System is idle. Mode: ${state.inventory_mode.replace(/_/g, ' ')}. Upload ASN to begin.`,
+            awaiting_box_scan: `ASN for PO ${state.asn_summary?.po_number} loaded. Select a box to scan.`,
+            scanning_box: `Scanning Box ID: ${state.current_asn_box?.box_id}...`,
+            complete: "ASN processing complete. View results or start new session."
+        }[state.asn_status] || statusText;
+
+        const asnDataLoaded = !!state.asn_summary;
+        document.getElementById('sc-asn-upload-section').classList.toggle('hidden', asnDataLoaded);
+        document.getElementById('sc-asn-active-section').classList.toggle('hidden', !asnDataLoaded);
+        if (asnDataLoaded) {
+            document.getElementById('sc-asn-po-number').textContent = state.asn_summary.po_number || 'N/A';
+            document.getElementById('sc-asn-box-count').textContent = state.asn_summary.total_boxes || 0;
+        }
+    }
+    document.getElementById('sc-status-text').textContent = statusText;
+
+    // Mode Selector Buttons
+    document.querySelectorAll('#sc-inventory-mode-selector button').forEach(btn => {
+        const isSelected = btn.dataset.mode === state.inventory_mode;
+        btn.classList.toggle('btn-primary', isSelected);
+        btn.classList.toggle('btn-secondary', !isSelected);
+        btn.disabled = ['scanning', 'auditing', 'awaiting_resolution'].includes(state.status) || ['awaiting_box_scan', 'scanning_box'].includes(state.asn_status);
+    });
+
+    // Main Action Buttons
+    const isSessionActive = ['scanning', 'auditing', 'awaiting_resolution'].includes(state.status) || ['awaiting_box_scan', 'scanning_box'].includes(state.asn_status);
+    const startBtn = document.getElementById('sc-start-btn');
+    const cancelAuditBtn = document.getElementById('sc-cancel-audit-btn');
+    const stopBtn = document.getElementById('sc-stop-btn');
+
+    startBtn.classList.toggle('hidden', isSessionActive);
+    cancelAuditBtn.classList.toggle('hidden', !(isAuditMode && ['auditing', 'awaiting_resolution'].includes(state.status)));
+    stopBtn.classList.add('hidden'); // Default hide
+
+    startBtn.textContent = isAuditMode ? 'Start Audit Session' : (isAsnMode ? 'Start ASN Session (Upload First)' : 'Start New Session');
+    startBtn.disabled = isSessionActive || (isAsnMode && state.asn_status === 'idle'); // Disable start if ASN not loaded
+
+    if (state.status === 'scanning' && !isAuditMode && !isAsnMode) {
+        stopBtn.classList.remove('hidden');
+        stopBtn.textContent = 'Stop & Finalize Stock';
+    } else if (state.status === 'auditing') {
+        stopBtn.classList.remove('hidden');
+        stopBtn.textContent = state.audit_target ? 'Pause Scan & Add Next' : 'Finish Audit';
+    }
+    document.getElementById('sc-audit-sku-input-container').classList.toggle('hidden', !(isAuditMode && state.status === 'auditing' && !state.audit_target));
+
+    // AI Feedback
+    const feedbackPanel = document.getElementById('sc-ai-feedback-panel');
+    const colors = { info: 'blue', success: 'green', warning: 'yellow', error: 'red' };
+    const color = colors[state.ai_feedback.type] || 'gray';
+    feedbackPanel.className = `panel p-4 border-l-4 border-${color}-500`;
+    document.getElementById('sc-ai-feedback-icon').textContent = { info: '💡', success: '✅', warning: '⚠️', error: '❗' }[state.ai_feedback.type] || '💬';
+    document.getElementById('sc-ai-feedback-title').textContent = `AI Guidance (${state.ai_feedback.type})`;
+    document.getElementById('sc-ai-feedback-title').className = `font-bold text-${color}-300`;
+    document.getElementById('sc-ai-feedback-message').textContent = state.ai_feedback.message;
+
+    // Scanned Items / Audit / ASN List
+    updateScannedItemsList(state, data.shielding_cart.asn_data); // Pass full ASN data
+
+    // Summary / Resolution Panel
+    updateSummaryResolutionPanel(state, data.shielding_cart.asn_data);
+
+    // --- REMOVED: Depletion list is no longer updated from the main poll ---
+    
+    // Maintenance Status
+    const maintStatusEl = document.getElementById('sc-maintenance-status');
+    const maintPrediction = health.maintenance_prediction || 'Nominal';
+    const maintColor = maintPrediction === 'Warning' ? 'yellow' : (maintPrediction === 'Critical' ? 'red' : 'green');
+    maintStatusEl.className = `p-3 rounded-lg bg-${maintColor}-900/50 border-l-4 border-${maintColor}-500`;
+    maintStatusEl.innerHTML = `<p class="font-bold text-${maintColor}-300">Status: ${maintPrediction}</p><p class="text-sm text-gray-300">${ {Nominal: "Hardware operating normally.", Warning: "Elevated temperature or latency.", Critical: "Inspection recommended."}[maintPrediction]}</p>`;
+
+    // Reader & Antenna Controls in System Control View
+    updateApp2ReaderControls('sc-reader-controls', data.reader_status);
+    updateApp2AntennaPowerControls('sc-antenna-power-controls', health.antennas);
+    // Vision controls update
+    updateApp2VisionControls(data.vision_worker_status?.status);
+}
+
+function updateScannedItemsList(state, fullAsnData) {
+    const itemsList = document.getElementById('sc-scanned-items-list');
+    const isAuditMode = state.inventory_mode === 'inventory_audit';
+    const isAsnMode = state.inventory_mode?.includes('asn');
+
+    if (state.status === 'scanning' && !isAuditMode && !isAsnMode) {
+        const totalItems = Object.keys(state.scanned_items).length;
+        document.getElementById('sc-total-items').textContent = totalItems;
+        itemsList.innerHTML = totalItems > 0 ? Object.entries(state.scanned_items).map(([epc, data]) => `
+            <div class="flex justify-between items-center bg-black/20 p-2 rounded-md">
+                <span class="font-mono text-xs truncate w-4/5" title="${epc}">${epc}</span>
+                <span class="font-mono text-sm font-bold">${data.count}</span>
+            </div>`).join('') : '<p class="text-center text-gray-500 pt-16">Waiting for scan data...</p>';
+    } else if (isAuditMode && (state.status === 'auditing' || state.status === 'awaiting_resolution' || state.status === 'complete')) {
+        const totalSKUs = Object.keys(state.audit_results).length;
+        document.getElementById('sc-total-items').textContent = totalSKUs;
+        itemsList.innerHTML = totalSKUs > 0 ? Object.entries(state.audit_results).map(([sku, data]) => {
+            const isTarget = state.audit_target && state.audit_target.sku === sku;
+            return `
+            <div class="p-2 rounded-md ${isTarget ? 'bg-orange-500/20 ring-1 ring-orange-500' : 'bg-black/20'}">
+                <div class="flex justify-between items-center">
+                    <span class="font-semibold text-sm truncate w-3/5" title="${data.name}">${data.name}</span>
+                    <span class="font-mono text-sm">Scanned: <b class="text-white">${data.scanned_count || 0}</b> / ${data.expected_count}</span>
+                </div>
+                <p class="font-mono text-xs text-gray-400">SKU: ${sku}</p>
+            </div>`;
+        }).join('') : '<p class="text-center text-gray-500 pt-16">Set an audit SKU to begin.</p>';
+    } else if (isAsnMode) {
+        const asnStatus = state.asn_status;
+        const asnSummary = state.asn_summary; // Use summary for count
+        const currentBox = state.current_asn_box;
+
+        document.getElementById('sc-total-items').textContent = asnSummary?.total_boxes || 0;
+
+        if (asnStatus === 'idle') {
+            itemsList.innerHTML = '<p class="text-center text-gray-500 pt-16">Upload an ASN file to start.</p>';
+        } else if (asnStatus === 'awaiting_box_scan' && fullAsnData) { // Use fullAsnData here
+            const mainScrollPosition = itemsList.scrollTop; // Save scroll position
+            const innerScrollPositions = {};
+             itemsList.querySelectorAll('details[open]').forEach(detailsElement => {
+                 const summary = detailsElement.querySelector('summary[data-box-id]');
+                 const scrollableDiv = detailsElement.querySelector('.overflow-y-auto');
+                 if (summary && scrollableDiv) {
+                     const boxId = summary.dataset.boxId;
+                     if (boxId) innerScrollPositions[boxId] = scrollableDiv.scrollTop;
+                 }
+             });
+
+            itemsList.innerHTML = Object.keys(fullAsnData.boxes).sort().map(boxId => {
+                const boxData = fullAsnData.boxes[boxId];
+                const result = state.asn_scan_results[boxId];
+                let statusHtml = `<button onclick="controlShieldingCartAsn('start_box_scan', { box_id: '${boxId}' })" class="btn btn-secondary text-xs">Scan Box</button>`;
+                let resultDetailsHtml = '';
+
+                if (result) {
+                    const hasDiscrepancy = result.missing.length > 0 || result.extra.length > 0;
+                    statusHtml = `<span class="text-xs font-bold ${hasDiscrepancy ? 'text-red-400' : 'text-green-400'}">${hasDiscrepancy ? 'DISCREPANCY' : '✓ MATCHED'}</span>
+                                <button onclick="controlShieldingCartAsn('rescan_box', { box_id: '${boxId}' })" class="btn btn-secondary text-xs ml-2">Rescan</button>`;
+                    resultDetailsHtml = `<div class="grid grid-cols-3 gap-2 text-center mt-3 text-xs">
+                           <div class="bg-green-500/10 p-1 rounded"><span class="font-bold text-green-400">${result.matched.length}</span><br>Matched</div>
+                           <div class="bg-yellow-500/10 p-1 rounded"><span class="font-bold text-yellow-400">${result.missing.length}</span><br>Missing</div>
+                           <div class="bg-red-500/10 p-1 rounded"><span class="font-bold text-red-400">${result.extra.length}</span><br>Extra</div>
+                       </div>
+                       <details class="text-xs mt-2" ${asnOpenDetails.has(boxId) ? 'open' : ''}>
+                           <summary data-box-id="${boxId}" class="cursor-pointer text-gray-400 hover:text-white">Show EPC Details</summary>
+                           <div class="mt-2 p-2 bg-black/30 rounded max-h-40 overflow-y-auto">
+                                ${result.missing.length > 0 ? `<b>Missing:</b><ul class="list-disc pl-4 text-yellow-400">${result.missing.map(epc => `<li>${epc.substring(0,12)}...</li>`).join('')}</ul>` : ''}
+                                ${result.extra.length > 0 ? `<b class="mt-1 inline-block">Extra:</b><ul class="list-disc pl-4 text-red-400">${result.extra.map(epc => `<li>${epc.substring(0,12)}...</li>`).join('')}</ul>` : ''}
+                                ${result.missing.length === 0 && result.extra.length === 0 ? `<p class="text-gray-500">No discrepancies.</p>` : ''}
+                           </div>
+                       </details>`;
+                }
+                return `
+                <div class="bg-black/20 p-3 rounded-lg border border-transparent hover:border-orange-500/50 transition-colors">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <p class="font-semibold">Box ID: <b class="font-mono text-lg text-orange-300">${boxId}</b></p>
+                            <div class="text-xs text-gray-400 mt-1">
+                                <span>SKUs: <b class="text-white">${boxData.skus.length}</b></span> |
+                                <span>EPCs: <b class="text-white">${boxData.expected_epcs.length}</b></span>
+                            </div>
+                        </div>
+                        <div class="text-right">${statusHtml}</div>
+                    </div>
+                    ${resultDetailsHtml}
+                </div>`;
+            }).join('');
+
+            // Restore scroll positions
+            itemsList.scrollTop = mainScrollPosition;
+             Object.keys(innerScrollPositions).forEach(boxId => {
+                 const detailsElement = itemsList.querySelector(`summary[data-box-id="${boxId}"]`);
+                 if (detailsElement && detailsElement.parentElement.hasAttribute('open')) {
+                     const scrollableDiv = detailsElement.parentElement.querySelector('.overflow-y-auto');
+                     if (scrollableDiv) scrollableDiv.scrollTop = innerScrollPositions[boxId];
+                 }
+             });
+
+        } else if (asnStatus === 'scanning_box') {
+            const scannedCount = currentBox?.scanned_epcs?.length || 0;
+            const expectedCount = fullAsnData?.boxes?.[currentBox?.box_id]?.expected_epcs?.length || 0;
+            itemsList.innerHTML = `
+                <div class="p-3 rounded-md bg-orange-500/20 ring-1 ring-orange-500 text-center">
+                    <p class="text-lg font-bold">Scanning Box: ${currentBox.box_id}</p>
+                    <p class="font-mono text-5xl my-4">${scannedCount} / ${expectedCount}</p>
+                    <button onclick="controlShieldingCartAsn('finalize_box_scan')" class="btn btn-primary w-full mt-4">Finalize Box Scan</button>
+                </div>`;
+        } else { // Complete or other states
+            itemsList.innerHTML = '<p class="text-center text-gray-500 pt-16">ASN Session complete or not started.</p>';
+        }
+    } else { // Idle state
+        itemsList.innerHTML = '<p class="text-center text-gray-500 pt-16">Start a session to see scanned items.</p>';
+        document.getElementById('sc-total-items').textContent = 0;
+    }
+}
+
+function updateSummaryResolutionPanel(state, fullAsnData) {
+    const summaryPanel = document.getElementById('sc-session-summary-panel');
+    const isAuditMode = state.inventory_mode === 'inventory_audit';
+    const isAsnMode = state.inventory_mode?.includes('asn');
+
+    const showPanel = (state.status === 'complete' || state.status === 'awaiting_resolution') ||
+                         (isAsnMode && ['awaiting_box_scan', 'complete'].includes(state.asn_status) && state.asn_summary); // Show only if ASN is loaded
+
+    summaryPanel.classList.toggle('hidden', !showPanel);
+    if (!showPanel) return;
+
+    // Standard Session Scorecard
+    if (state.status === 'complete' && !isAuditMode && !isAsnMode) {
+        const summary = state.session_summary;
+        summaryPanel.innerHTML = `
+            <h2 class="text-2xl font-bold mb-4 text-white">Session Scorecard</h2>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                <div><p class="font-mono text-4xl text-green-400">${summary.performance_score || 0}</p><p class="text-xs text-gray-400">Perf. Score</p></div>
+                <div><p class="font-mono text-4xl text-white">${summary.unique_items || 0}</p><p class="text-xs text-gray-400">Unique Items</p></div>
+                <div><p class="font-mono text-4xl text-white">${summary.scans_per_minute?.toFixed(0) || 0}</p><p class="text-xs text-gray-400">Scans / Min</p></div>
+                <div><p class="font-mono text-4xl text-white">${summary.duration_sec || 0}s</p><p class="text-xs text-gray-400">Duration</p></div>
+            </div>`;
+    // Audit Resolution / Completed Audit View
+    } else if (isAuditMode && (state.status === 'awaiting_resolution' || state.status === 'complete')) {
+        const results = state.audit_results || {};
+        const hasDiscrepancy = Object.values(results).some(r => r.discrepancy !== 0);
+        summaryPanel.innerHTML = `
+            <h2 class="text-2xl font-bold mb-4 text-white">Inventory Audit Results</h2>
+            <div class="overflow-x-auto max-h-64">
+                <table class="w-full">
+                    <thead class="sticky top-0 bg-[#1C1C1C]">
+                        <tr class="text-xs text-gray-400 uppercase">
+                            <th class="p-2 text-left">Product (SKU)</th><th class="p-2 text-center">Expected</th><th class="p-2 text-center">Scanned</th><th class="p-2 text-center">Discrepancy</th>
+                            ${state.status === 'awaiting_resolution' ? '<th class="p-2 text-center">Actions</th>' : ''}
+                        </tr>
+                    </thead>
+                    <tbody id="sc-audit-resolution-body" class="divide-y divide-[var(--border-color)]">
+                        ${Object.keys(results).length > 0 ? Object.entries(results).map(([sku, data]) => {
+                            let actionButtons = '';
+                            if (state.status === 'awaiting_resolution' && data.discrepancy !== 0) {
+                                const logMissingBtn = data.discrepancy < 0 ? `<button data-resolution-sku="${sku}" data-resolution-action="log_missing" class="btn btn-secondary text-xs">Log Missing</button>` : '';
+                                actionButtons = `<button onclick="controlShieldingCartAudit('rescan', { sku: '${sku}' })" class="btn btn-secondary text-xs">Rescan</button>
+                                                <button data-resolution-sku="${sku}" data-resolution-action="reject" class="btn btn-secondary text-xs">Reject</button>
+                                                ${logMissingBtn}
+                                                <button data-resolution-sku="${sku}" data-resolution-action="accept" class="btn btn-primary text-xs">Accept</button>`;
+                            } else if (state.status === 'awaiting_resolution') {
+                                actionButtons = `<span class="text-xs text-green-400">✓ Matched</span>`;
+                            }
+                            return `<tr class="text-sm">
+                                        <td class="p-2">${data.name} (${sku})</td>
+                                        <td class="p-2 font-mono text-center">${data.expected_count}</td>
+                                        <td class="p-2 font-mono text-center">${data.scanned_count}</td>
+                                        <td class="p-2 font-mono text-center"><span class="p-1 px-2 rounded ${data.discrepancy !== 0 ? 'bg-yellow-500/20 text-yellow-300' : 'bg-green-500/20 text-green-300'}">${data.discrepancy > 0 ? '+' : ''}${data.discrepancy}</span></td>
+                                        ${state.status === 'awaiting_resolution' ? `<td class="p-2 text-center space-x-1">${actionButtons}</td>` : ''}
+                                    </tr>`
+                        }).join('') : '<tr><td colspan="5" class="p-4 text-center text-gray-400">No SKUs audited.</td></tr>'}
+                    </tbody>
+                </table>
+            </div>
+            ${state.status === 'awaiting_resolution' ? `
+                <div class="mt-4 pt-4 border-t border-dashed ${hasDiscrepancy ? 'border-yellow-500' : 'border-green-500'} text-center">
+                    <h3 class="text-lg font-bold ${hasDiscrepancy ? 'text-yellow-300' : 'text-green-300'}">${hasDiscrepancy ? 'Action Required' : 'No Discrepancies'}</h3>
+                    <p class="text-sm text-gray-400 my-2">${hasDiscrepancy ? 'Review discrepancies, select actions, then finalize.' : 'All counts match.'}</p>
+                    <button id="sc-finalize-audit-btn" class="btn btn-primary">Finalize Audit</button>
+                </div>` : ''}
+             ${state.status === 'complete' ? `
+                 <div class="mt-4 pt-4 border-t border-dashed border-green-500 text-center">
+                       <h3 class="text-lg font-bold text-green-300">✓ Audit Complete</h3>
+                       <p class="text-sm text-gray-400 my-2">Inventory updated based on resolution.</p>
+                 </div>
+             ` : ''}`;
+    // ASN Resolution / Completed ASN View
+    } else if (isAsnMode && (state.asn_status === 'awaiting_box_scan' || state.asn_status === 'complete')) {
+        const allBoxesScanned = state.asn_summary && Object.keys(state.asn_scan_results).length >= state.asn_summary.total_boxes;
+        const isComplete = state.asn_status === 'complete';
+
+        if (allBoxesScanned && !isComplete && fullAsnData) { // Check fullAsnData
+            let totalExpected = 0;
+            let totalMissing = 0;
+            let totalExtra = 0;
+            Object.values(state.asn_scan_results).forEach(res => { totalMissing += res.missing.length; totalExtra += res.extra.length; });
+            Object.values(fullAsnData.boxes).forEach(box => { totalExpected += box.expected_epcs.length; });
+
+            summaryPanel.innerHTML = `
+                <h2 class="text-2xl font-bold mb-4 text-white">ASN Final Report</h2>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-center mb-4">
+                    <div><p class="font-mono text-3xl text-white">${state.asn_summary.total_boxes}</p><p class="text-xs text-gray-400">Boxes</p></div>
+                    <div><p class="font-mono text-3xl text-blue-400">${totalExpected}</p><p class="text-xs text-gray-400">Expected</p></div>
+                    <div><p class="font-mono text-3xl text-yellow-400">${totalMissing}</p><p class="text-xs text-gray-400">Missing</p></div>
+                    <div><p class="font-mono text-3xl text-red-400">${totalExtra}</p><p class="text-xs text-gray-400">Extra</p></div>
+                </div>
+                <div class="mt-4 pt-4 border-t border-dashed border-orange-500">
+                    <h3 class="text-lg font-bold text-orange-300 text-center">Resolve Shipment</h3>
+                    <p class="text-sm text-gray-400 my-2 text-center">Finalize this ASN and update inventory.</p>
+                    <div id="asn-resolution-buttons" class="grid grid-cols-1 md:grid-cols-3 gap-2 mt-4">
+                        <button data-resolution="accept" class="btn btn-primary">Accept & Update</button>
+                        <button data-resolution="log_missing" class="btn btn-secondary">Update & Log Missing</button>
+                        <button data-resolution="reject" class="btn btn-danger">Reject ASN</button>
+                    </div>
+                </div>`;
+        } else if (isComplete) {
+            summaryPanel.innerHTML = `
+                <div class="text-center p-4 bg-green-900/50 rounded-lg">
+                    <p class="text-lg font-semibold text-green-300">✓ ASN Process Complete</p>
+                    <p class="text-sm text-gray-300">Inventory updated based on selection.</p>
+                    <button onclick="controlShieldingCartAsn('cancel_asn')" class="btn btn-secondary w-full mt-4">Return to Dashboard</button>
+                </div>`;
+        } else { // Waiting for more boxes or ASN not loaded
+            summaryPanel.innerHTML = '<div class="text-center p-4"><p class="text-gray-400">Scan all boxes to generate final report.</p></div>';
+        }
+    } else { // Fallback if state is unusual
+         summaryPanel.innerHTML = '';
+    }
+}
+
+function updateApp2VisionControls(status) {
+    const visionToggleBtnSys = document.getElementById('sc-vision-toggle-btn-sys'); // Use the correct ID
+    const btnText = (status === 'Stopped' || status === 'Error') ? 'Start Camera' : 'Stop Camera';
+    visionToggleBtnSys.textContent = btnText;
+}
+
+// ==========================================================
+// === START: JAVASCRIPT FUNCTIONS (UNCHANGED)
+// ==========================================================
+
+// --- API Call Functions ---
+function controlShieldingCartSession(action) {
+    apiCall('/api/shielding_cart/session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: action })
+    })
+    .then(data => showToast(data.message, data.status === 'success' ? 'success' : 'info'))
+    .catch(err => console.error(err));
+}
+
+function controlShieldingCartAudit(action, params = {}) {
+    apiCall('/api/shielding_cart/audit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: action, ...params })
+    })
+    .then(data => {
+        showToast(data.message, data.status === 'success' ? 'success' : 'info');
+        if (action === 'set_sku' && data.status === 'success') {
+            document.getElementById('sc-audit-sku-input').value = ''; // Clear input on success
+        }
+    })
+    .catch(err => console.error(err));
+}
+
+function controlShieldingCartAsn(action, params = {}) {
+    apiCall('/api/shielding_cart/asn_action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: action, ...params })
+    })
+    .then(data => showToast(data.message, data.status === 'success' ? 'success' : 'info'))
+    .catch(err => console.error(err));
+}
+
+function updateInventoryView(tableBodyId, query = '') {
+    const tableBody = document.getElementById(tableBodyId);
+    if (!tableBody) return;
+    tableBody.innerHTML = '<tr><td colspan="6" class="p-4 text-center text-gray-500">Loading inventory...</td></tr>';
+    
+    apiCall(`/api/inventory_view?query=${encodeURIComponent(query)}`)
+        .then(data => {
+            if (data.status === 'success' && data.inventory.length > 0) {
+                tableBody.innerHTML = data.inventory.map(item => `
+                    <tr class="text-sm hover:bg-white/5">
+                        <td class="p-3 font-mono" title="${item.epc}">${item.epc.substring(0, 16)}...</td>
+                        <td class="p-3 font-mono">${item.sku || 'N/A'}</td>
+                        <td class="p-3">${item.name || 'N/A'}</td>
+                        <td class="p-3 font-mono text-center">${item.stock_level}</td>
+                        <td class="p-3 font-mono text-center">${item.avg_daily_usage?.toFixed(1) || 'N/A'}</td>
+                        <td class="p-3"><span class="px-2 py-1 rounded-full text-xs ${item.inventory_status === 'Missing' ? 'bg-red-500/20 text-red-300' : 'bg-green-500/20 text-green-300'}">${item.inventory_status || 'Available'}</span></td>
+                    </tr>
+                `).join('');
+            } else {
+                tableBody.innerHTML = '<tr><td colspan="6" class="p-4 text-center text-gray-500">No inventory items found. Upload a master inventory file.</td></tr>';
+            }
+        })
+        .catch(err => {
+            tableBody.innerHTML = '<tr><td colspan="6" class="p-4 text-center text-red-400">Error loading inventory.</td></tr>';
+        });
+}
+
+function updateApp2ReaderControls(containerId, status) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    const isConnected = status === 'Connected';
+    container.querySelectorAll('.reader-ip, .reader-user, .reader-pass, .reader-connect-btn').forEach(el => el.disabled = isConnected);
+    container.querySelector('.reader-connect-btn').classList.toggle('hidden', isConnected);
+    container.querySelector('.reader-disconnect-btn').classList.toggle('hidden', !isConnected);
+}
+
+function updateApp2AntennaPowerControls(containerId, antennas) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    
+    if (Object.keys(antennas).length === 0) {
+        container.innerHTML = '<p class="text-gray-500 text-sm">Antenna power controls appear here when reader is connected.</p>';
+        return;
+    }
+
+    let isInitialized = container.querySelector(`#ant-1`); 
+
+    if (Object.keys(antennas).length > 0 && !isInitialized) {
+         container.innerHTML = ''; // Clear the placeholder text
+    }
+
+    Object.entries(antennas).forEach(([antId, antData]) => {
+        let antEl = container.querySelector(`#ant-${antId}`);
+        if (!antEl) {
+            antEl = document.createElement('div');
+            antEl.id = `ant-${antId}`;
+            antEl.className = 'space-y-2';
+            antEl.innerHTML = `
+                <div class="flex justify-between items-center">
+                    <label class="text-sm font-medium text-gray-300">Antenna ${antId} Power (dBm)</label>
+                    <span class="font-mono text-sm text-orange-300"></span>
+                </div>
+                <input type="range" min="10" max="30" step="0.5" class="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer range-thumb-orange-500">
+            `;
+            container.appendChild(antEl);
+
+            const slider = antEl.querySelector('input[type="range"]');
+            const label = antEl.querySelector('span');
+
+            const setPower = () => {
+                const power = parseFloat(slider.value);
+                label.textContent = power.toFixed(1);
+                apiCall('/api/antenna/power', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ antenna_id: parseInt(antId), power: power })
+                });
+            };
+            
+            slider.addEventListener('change', setPower);
+            slider.addEventListener('input', () => label.textContent = parseFloat(slider.value).toFixed(1));
+        }
+        
+        const slider = antEl.querySelector('input[type="range"]');
+        if (document.activeElement !== slider) {
+            const currentPower = parseFloat(antData.power_level || 20.0);
+            slider.value = currentPower;
+            antEl.querySelector('span').textContent = currentPower.toFixed(1);
+        }
+    });
+
+    Array.from(container.children).forEach(child => {
+        if (child.id.startsWith('ant-') && !antennas[child.id.split('-')[1]]) {
+            child.remove();
+        }
+    });
+}
+
+function controlReader(action) {
+    const container = document.querySelector('#sc-reader-controls');
+    if (!container) {
+        console.error("Could not find reader controls.");
+        return;
+    }
+    const config = {
+        ip: container.querySelector('.reader-ip').value,
+        user: container.querySelector('.reader-user').value,
+        pass: container.querySelector('.reader-pass').value
+    };
+
+    if (action === 'connect') {
+        localStorage.setItem('readerConfigApp2', JSON.stringify(config)); // Save config
+        apiCall('/api/reader', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(config)
+        })
+        .then(data => showToast(data.message, 'info'))
+        .catch(err => console.error(err));
+    } else if (action === 'disconnect') {
+        apiCall('/api/reader', { method: 'DELETE' })
+        .then(data => showToast(data.message, 'info'))
+        .catch(err => console.error(err));
+    }
+}
+
+function controlVision(action) {
+    const method = (action === 'start') ? 'POST' : 'DELETE';
+    apiCall('/api/vision_control', { method: method })
+        .then(data => showToast(data.message, 'info'))
+        .catch(err => console.error(err));
+}
+
+// --- Historical Chart Update ---
+function updateShieldingCartHistoryChart() {
+    if (latestData && latestData.shielding_cart && latestData.shielding_cart.historical_stats && latestData.shielding_cart.historical_stats.recent_scores) {
+        const scores = latestData.shielding_cart.historical_stats.recent_scores.slice().reverse(); // Show oldest first
+        const labels = scores.map(s => new Date(s.timestamp).toLocaleString());
+        const data = scores.map(s => s.performance_score);
+        charts.scHistory.data.labels = labels;
+        charts.scHistory.data.datasets[0].data = data;
+        charts.scHistory.update();
+    }
+}
+
+// ==========================================================
+// === END: JAVASCRIPT FUNCTIONS (UNCHANGED)
+// ==========================================================
+
+// --- *** NEW FUNCTION *** ---
+/**
+ * Fetches all predictions from the new endpoint and displays them
+ */
+function fetchAllDepletionPredictions() {
+    const depletionList = document.getElementById('sc-depletion-list');
+    depletionList.innerHTML = '<p class="text-center text-gray-500 pt-8">Loading predictions...</p>';
+
+    apiCall('/api/ai/all_depletion_predictions')
+        .then(data => {
+            if (data.status === 'success' && data.predictions.length > 0) {
+                depletionList.innerHTML = data.predictions.map(p => `
+                    <div class="flex justify-between items-center text-sm p-2 bg-black/20 rounded">
+                        <span>${p.name} (SKU: ${p.sku})</span>
+                        <span class="font-mono"><b class="${p.prophet_days_left < 7 ? 'text-red-400' : (p.prophet_days_left < 30 ? 'text-yellow-400' : 'text-green-400')}">${p.prophet_days_left}</b> days left</span>
+                    </div>`).join('');
+            } else {
+                depletionList.innerHTML = '<p class="text-center text-gray-500 pt-8">No predictions found. Upload a valid sales log with 5+ days of data per item.</p>';
+            }
+        })
+        .catch(err => {
+            depletionList.innerHTML = '<p class="text-center text-red-400 pt-8">Error loading predictions.</p>';
+        });
+}
+// --- *** END NEW FUNCTION *** ---
+
+
+// --- Event Listeners ---
+document.addEventListener('DOMContentLoaded', () => {
+    // Hub Navigation
+    document.getElementById('launch-options').addEventListener('click', (e) => {
+        const card = e.target.closest('.launch-card');
+        if (card) launchApplication(card.dataset.target); 
+    });
+    document.querySelectorAll('.return-home-btn').forEach(btn => btn.addEventListener('click', showWelcomePage));
+
+    // App Navigation
+    document.querySelectorAll('.app-nav .sidebar-link').forEach(link => link.addEventListener('click', handleAppNavigation));
+
+    // Shielding Cart Controls
+    document.querySelectorAll('#sc-reader-controls .reader-connect-btn').forEach(btn => btn.addEventListener('click', () => controlReader('connect')));
+    document.querySelectorAll('#sc-reader-controls .reader-disconnect-btn').forEach(btn => btn.addEventListener('click', () => controlReader('disconnect')));
+    document.getElementById('sc-vision-toggle-btn-sys').addEventListener('click', () => {
+         const btn = document.getElementById('sc-vision-toggle-btn-sys');
+         const action = btn.textContent.includes('Start') ? 'start' : 'stop';
+         controlVision(action);
+    });
+
+    document.querySelectorAll('#sc-inventory-mode-selector button').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const mode = e.currentTarget.dataset.mode;
+            apiCall('/api/shielding_cart/inventory_mode', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode }) });
+        });
+    });
+
+    document.getElementById('sc-set-audit-sku-btn').addEventListener('click', () => {
+        const sku = document.getElementById('sc-audit-sku-input').value.trim();
+        if (sku) controlShieldingCartAudit('set_sku', { sku });
+        else showToast('Please enter a SKU.', 'warning');
+    });
+
+    // File Uploads
+    const setupFileUpload = (inputId, buttonId, url) => {
+        document.getElementById(buttonId)?.addEventListener('click', () => {
+            const input = document.getElementById(inputId);
+            if (!input || input.files.length === 0) { showToast('Please select a file.', 'warning'); return; }
+            const formData = new FormData();
+            formData.append('file', input.files[0]);
+            showToast('Uploading file... This may take a minute for model training.', 'info'); // Modified toast
+            fetch(`${API_BASE_URL}${url}`, { method: 'POST', body: formData })
+                .then(res => res.json())
+                .then(data => showToast(data.message, data.status === 'success' ? 'success' : 'error'))
+                .catch(err => showToast(`Upload failed: ${err.message || 'Unknown error'}`, 'error'));
+        });
+    };
+    setupFileUpload('sc-inventory-file-input', 'sc-upload-inventory-btn', '/api/sc/upload_inventory_doc');
+    setupFileUpload('sc-sales-file-input', 'sc-upload-sales-btn', '/api/sc/upload_sales_doc');
+    setupFileUpload('sc-asn-file-input', 'sc-upload-asn-btn', '/api/shielding_cart/upload_asn');
+
+    // Inventory Download
+     document.getElementById('sc-download-inventory-btn')?.addEventListener('click', () => {
+          showToast('Preparing inventory download...', 'info');
+          apiCall('/api/download_inventory')
+               .then(blob => {
+                   const url = window.URL.createObjectURL(blob);
+                   const a = document.createElement('a');
+                   a.style.display = 'none'; a.href = url;
+                   a.download = `inventory_snapshot_${new Date().toISOString().split('T')[0]}.csv`;
+                   document.body.appendChild(a); a.click(); window.URL.revokeObjectURL(url); a.remove(); // Clean up
+                   showToast('Inventory download started.', 'success');
+               })
+               .catch(err => showToast(`Download failed: ${err.message}`, 'error'));
+     });
+
+
+    // Inventory View Search
+    document.getElementById('sc-inventory-search-btn')?.addEventListener('click', () => updateInventoryView('sc-inventory-table-body', document.getElementById('sc-inventory-search-input').value));
+    document.getElementById('sc-inventory-search-input')?.addEventListener('keypress', (e) => { if(e.key === 'Enter') updateInventoryView('sc-inventory-table-body', e.target.value); });
+
+    // ==========================================================
+    // === EVENT LISTENERS (UNCHANGED)
+    // ==========================================================
+
+    // --- Main Session/Audit Control Buttons ---
+    document.getElementById('sc-start-btn').addEventListener('click', () => {
+        if (!latestData) return;
+        const mode = latestData.shielding_cart.inventory_mode;
+        if (mode === 'inventory_audit') {
+            controlShieldingCartAudit('start');
+        } else if (mode.includes('asn')) {
+            // This button is disabled if ASN isn't loaded, so no action needed
+        } else {
+            controlShieldingCartSession('start');
+        }
+    });
+
+    document.getElementById('sc-stop-btn').addEventListener('click', () => {
+        if (!latestData) return;
+        const state = latestData.shielding_cart.status;
+        const mode = latestData.shielding_cart.inventory_mode;
+        
+        if (state === 'scanning' && mode !== 'inventory_audit') {
+            controlShieldingCartSession('stop');
+        } else if (state === 'auditing') {
+            // This button acts as 'pause' or 'finish'
+            const hasTarget = !!latestData.shielding_cart.audit_target;
+            controlShieldingCartAudit(hasTarget ? 'pause_scan' : 'finish_scan');
+        }
+    });
+
+    document.getElementById('sc-cancel-audit-btn').addEventListener('click', () => {
+        controlShieldingCartAudit('cancel');
+    });
+
+    document.getElementById('sc-cancel-asn-btn').addEventListener('click', () => {
+        controlShieldingCartAsn('cancel_asn');
+    });
+
+    // --- ASN/Audit Resolution (Event Delegation) ---
+    document.getElementById('sc-session-summary-panel').addEventListener('click', (e) => {
+        const finalizeAuditBtn = e.target.closest('#sc-finalize-audit-btn');
+        const asnResolutionBtn = e.target.closest('#asn-resolution-buttons button');
+        const auditActionBtn = e.target.closest('#sc-audit-resolution-body button[data-resolution-action]');
+
+        if (finalizeAuditBtn) {
+            const resolutions = {};
+            document.querySelectorAll('#sc-audit-resolution-body button[data-resolution-sku]').forEach(btn => {
+                if(btn.classList.contains('btn-primary') || btn.dataset.selected === 'true') {
+                     resolutions[btn.dataset.resolutionSku] = btn.dataset.resolutionAction;
+                }
+            });
+            
+            if (latestData && latestData.shielding_cart.audit_results) {
+                Object.entries(latestData.shielding_cart.audit_results).forEach(([sku, item]) => {
+                    if (item.discrepancy === 0 && !resolutions[sku]) {
+                        resolutions[sku] = 'accept';
+                    }
+                });
+            }
+            controlShieldingCartAudit('finalize', { resolutions });
+        }
+        
+        if (asnResolutionBtn) {
+            const resolution = asnResolutionBtn.dataset.resolution;
+            controlShieldingCartAsn('complete_asn', { resolution });
+        }
+
+        if (auditActionBtn) {
+            const sku = auditActionBtn.dataset.resolutionSku;
+            const action = auditActionBtn.dataset.resolutionAction;
+            const parent = auditActionBtn.parentElement;
+            
+            parent.querySelectorAll('button[data-resolution-sku]').forEach(btn => {
+                btn.classList.remove('btn-primary', 'data-selected');
+                btn.classList.add('btn-secondary');
+            });
+            
+            auditActionBtn.classList.remove('btn-secondary');
+            auditActionBtn.classList.add('btn-primary');
+            auditActionBtn.dataset.selected = 'true'; // Mark as selected
+        }
+    });
+
+    // Handle ASN box detail toggle
+    document.getElementById('sc-scanned-items-list').addEventListener('click', (e) => {
+        const summary = e.target.closest('summary[data-box-id]');
+        if (summary) {
+            const boxId = summary.dataset.boxId;
+            const details = summary.parentElement;
+            if (details.hasAttribute('open')) {
+                asnOpenDetails.delete(boxId);
+            } else {
+                asnOpenDetails.add(boxId);
+            }
+        }
+    });
+
+    // ==========================================================
+    // === END: EVENT LISTENERS (UNCHANGED)
+    // ==========================================================
+
+
+    // Plexus Background (keep as is)
+     const plexusCanvas = document.getElementById('plexus-canvas');
+     const ctx = plexusCanvas.getContext('2d');
+     let particles = [];
+     function resizeCanvas() { plexusCanvas.width = window.innerWidth; plexusCanvas.height = window.innerHeight; }
+     resizeCanvas();
+     class Particle {
+         constructor() { this.x = Math.random() * plexusCanvas.width; this.y = Math.random() * plexusCanvas.height; this.size = Math.random() * 1.5 + 1; this.speedX = (Math.random() * 0.4 - 0.2); this.speedY = (Math.random() * 0.4 - 0.2); this.color = `rgba(255, 77, 0, ${Math.random() * 0.5 + 0.2})`; }
+         update() { if (this.x > plexusCanvas.width || this.x < 0) this.speedX = -this.speedX; if (this.y > plexusCanvas.height || this.y < 0) this.speedY = -this.speedY; this.x += this.speedX; this.y += this.speedY; }
+         draw() { ctx.fillStyle = this.color; ctx.beginPath(); ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2); ctx.fill(); }
+     }
+     function initParticles() { particles = []; let n = (plexusCanvas.width * plexusCanvas.height) / 9000; for (let i = 0; i < n; i++) { particles.push(new Particle()); } }
+     initParticles();
+     function connectParticles() { for (let a = 0; a < particles.length; a++) { for (let b = a; b < particles.length; b++) { let d = ((particles[a].x - particles[b].x) ** 2) + ((particles[a].y - particles[b].y) ** 2); if (d < (plexusCanvas.width/7) * (plexusCanvas.height/7)) { let o = 1 - (d/20000); ctx.strokeStyle = `rgba(255, 77, 0, ${o * 0.3})`; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(particles[a].x, particles[a].y); ctx.lineTo(particles[b].x, particles[b].y); ctx.stroke(); } } } }
+     function animatePlexus() { ctx.clearRect(0, 0, plexusCanvas.width, plexusCanvas.height); particles.forEach(p => { p.update(); p.draw(); }); connectParticles(); requestAnimationFrame(animatePlexus); }
+     animatePlexus();
+      window.addEventListener('resize', () => { resizeCanvas(); initParticles(); });
+});
+</script>
+</body>
+</html>
